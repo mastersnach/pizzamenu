@@ -783,6 +783,7 @@
         let currentlyEditingId = null;
         let isAddingNew = false;
         let currentlyAddingHeading = false;
+        let currentlyEditingHeading = false;
 
         function clearModalFields() {
             document.getElementById('modal-title').textContent = 'Lägg till ny rätt';
@@ -996,6 +997,35 @@
 
                 // Close modal
                 document.getElementById('edit-modal').style.display = 'none';
+            } else if (currentlyEditingHeading && currentlyEditingH2) {
+                // Handle heading editing
+                const newHeadingText = document.getElementById('modal-name').value.trim();
+
+                if (!newHeadingText) {
+                    alert('Rubrik text är obligatorisk!');
+                    return;
+                }
+
+                // Update the heading text
+                const oldText = currentlyEditingH2.textContent;
+                currentlyEditingH2.textContent = newHeadingText;
+
+                // Update headingsData
+                const headingIndex = headingsData.findIndex(h => h.text === oldText);
+                if (headingIndex !== -1) {
+                    headingsData[headingIndex].text = newHeadingText;
+                    saveHeadingsData();
+                } else {
+                    // Handle original h2 headings (like "Pizzor", "Köttfärspizzor", etc.)
+                    saveH2Changes(currentlyEditingH2.id || currentlyEditingH2.textContent.replace(/\s+/g, '_').toLowerCase(), newHeadingText);
+                }
+
+                // Reset modal state
+                currentlyEditingHeading = false;
+                currentlyEditingH2 = null;
+
+                // Close modal
+                document.getElementById('edit-modal').style.display = 'none';
 
                 return;
             }
@@ -1058,23 +1088,40 @@
         }
 
         function deleteItem() {
-            if (currentlyEditingId === null || isAddingNew) return;
+            if (currentlyEditingHeading && currentlyEditingH2) {
+                // Delete heading
+                if (confirm('Är du säker på att du vill ta bort denna rubrik?')) {
+                    const headingText = currentlyEditingH2.textContent;
+                    deleteHeading(headingText);
+                    currentlyEditingH2.remove();
 
-            if (confirm('Är du säker på att du vill radera denna rätt?')) {
-                // Remove the item
-                menuData = menuData.filter(item => item.id !== currentlyEditingId);
+                    // Reset modal state
+                    currentlyEditingHeading = false;
+                    currentlyEditingH2 = null;
 
-                // Reorder IDs to fill gaps
-                menuData.forEach((item, index) => {
-                    item.id = index + 1;
-                });
+                    // Close modal
+                    document.getElementById('edit-modal').style.display = 'none';
+                }
+            } else if (currentlyEditingId === null || isAddingNew) {
+                return;
+            } else {
+                // Delete menu item
+                if (confirm('Är du säker på att du vill radera denna rätt?')) {
+                    // Remove the item
+                    menuData = menuData.filter(item => item.id !== currentlyEditingId);
 
-                // Save to localStorage
-                saveMenuData();
+                    // Reorder IDs to fill gaps
+                    menuData.forEach((item, index) => {
+                        item.id = index + 1;
+                    });
 
-                // Close modal and re-render
-                closeModal();
-                render();
+                    // Save to localStorage
+                    saveMenuData();
+
+                    // Close modal and re-render
+                    closeModal();
+                    render();
+                }
             }
         }
 
@@ -1082,6 +1129,8 @@
             currentlyEditingId = null;
             isAddingNew = false;
             currentlyAddingHeading = false;
+            currentlyEditingHeading = false;
+            currentlyEditingH2 = null;
             document.getElementById('delete-btn').style.display = 'none';
 
             // Clear any inline styles
@@ -1137,57 +1186,35 @@
             if (currentlyEditingH2) return;
 
             currentlyEditingH2 = h2Element;
-            const originalText = h2Element.textContent;
 
-            // Make it editable
-            h2Element.contentEditable = true;
-            h2Element.focus();
+            // Clear modal for heading editing
+            clearModalFields();
+            document.getElementById('modal-title').textContent = 'Redigera rubrik';
 
-            // Select all text
-            const range = document.createRange();
-            range.selectNodeContents(h2Element);
-            const selection = window.getSelection();
-            selection.removeAllRanges();
-            selection.addRange(range);
+            // Hide price and description fields for headings
+            document.getElementById('modal-price').parentElement.style.display = 'none';
+            document.getElementById('modal-desc').parentElement.style.display = 'none';
 
-            // Handle when editing is done
-            h2Element.addEventListener('blur', function() {
-                finishH2Editing(h2Element, originalText);
-            });
+            // Show name field for heading text
+            document.getElementById('modal-name').parentElement.style.display = '';
+            document.getElementById('modal-name').value = h2Element.textContent;
+            document.getElementById('modal-name').placeholder = 'Rubrik text';
 
-            h2Element.addEventListener('keydown', function(event) {
-                if (event.key === 'Enter') {
-                    event.preventDefault();
-                    finishH2Editing(h2Element, originalText);
-                }
-                if (event.key === 'Escape') {
-                    h2Element.textContent = originalText;
-                    finishH2Editing(h2Element, originalText);
-                }
-            });
+            // Show delete button for headings
+            document.getElementById('delete-btn').style.display = 'inline-block';
+            document.getElementById('delete-btn').textContent = 'Radera rubrik';
+
+            // Set editing mode to heading
+            currentlyEditingHeading = true;
+            currentlyEditingH2 = h2Element;
+
+            // Show modal
+            document.getElementById('edit-modal').style.display = 'flex';
+
+            // Focus on name input
+            document.getElementById('modal-name').focus();
         }
 
-        function finishH2Editing(h2Element, originalText) {
-            h2Element.contentEditable = false;
-            h2Element.removeEventListener('blur', finishH2Editing);
-            h2Element.removeEventListener('keydown', finishH2Editing);
-
-            const newText = h2Element.textContent.trim();
-            if (newText !== originalText && newText !== '') {
-                // Check if this is one of our dynamically created headings
-                const headingIndex = headingsData.findIndex(h => h.text === originalText);
-                if (headingIndex !== -1) {
-                    // Update our headingsData
-                    headingsData[headingIndex].text = newText;
-                    saveHeadingsData();
-                } else {
-                    // Save to the original h2Headings system
-                    saveH2Changes(h2Element.id || h2Element.textContent.replace(/\s+/g, '_').toLowerCase(), newText);
-                }
-            }
-
-            currentlyEditingH2 = null;
-        }
 
         function saveH2Changes(h2Id, newText) {
             const h2Data = JSON.parse(localStorage.getItem('h2Headings') || '{}');
